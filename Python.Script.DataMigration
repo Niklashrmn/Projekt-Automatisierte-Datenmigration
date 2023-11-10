@@ -1,0 +1,57 @@
+import pandas as pd
+from sqlalchemy import create_engine
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from datetime import datetime, timedelta
+
+# Schritt 1: Datenextraktion von MySQL
+def extract_data_from_mysql():
+    # Annahme: Verbindung zu MySQL-Datenbank herstellen und Daten extrahieren
+    mysql_engine = create_engine('mysql://username:password@localhost/source_db')
+    query = 'SELECT * FROM your_table'
+    data = pd.read_sql(query, mysql_engine)
+    return data
+
+# Schritt 2: Datenbereinigung und Transformation
+def clean_and_transform_data(data):
+    # Annahme: Einfache Bereinigungs- und Transformationslogik
+    cleaned_data = data.dropna()
+    transformed_data = cleaned_data.apply(lambda x: x.upper() if isinstance(x, str) else x)
+    return transformed_data
+
+# Schritt 3: Datenladen in PostgreSQL
+def load_data_to_postgresql(data):
+    # Annahme: Verbindung zu PostgreSQL-Datenbank herstellen und Daten laden
+    postgresql_engine = create_engine('postgresql://username:password@localhost/target_db')
+    data.to_sql('your_table', postgresql_engine, index=False, if_exists='replace')
+
+# Schritt 4: Automatisierung mit Apache Airflow
+dag = DAG('automated_data_migration', 
+          schedule_interval='@daily',  # tägliche Ausführung
+          start_date=datetime(2023, 1, 1),  # Startdatum der Ausführung
+          catchup=False  # Verhindert die Ausführung von verpassten Tagen
+)
+
+# Tasks definieren
+extract_task = PythonOperator(
+    task_id='extract_data_from_mysql',
+    python_callable=extract_data_from_mysql,
+    dag=dag
+)
+
+transform_task = PythonOperator(
+    task_id='clean_and_transform_data',
+    provide_context=True,
+    python_callable=clean_and_transform_data,
+    dag=dag
+)
+
+load_task = PythonOperator(
+    task_id='load_data_to_postgresql',
+    provide_context=True,
+    python_callable=load_data_to_postgresql,
+    dag=dag
+)
+
+# Reihenfolge der Tasks festlegen
+extract_task >> transform_task >> load_task
